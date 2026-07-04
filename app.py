@@ -15,6 +15,11 @@ MODEL = "devstral-latest"
 # Fichier de persistance de la conversation.
 FICHIER_HISTORIQUE = "conversations.json"
 
+# Racine de l'explorateur de fichiers : on ne sort jamais de ce dossier.
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+# Entrées masquées dans l'explorateur (.env caché pour ne pas exposer la clé API).
+DOSSIERS_IGNORES = {".git", "venv", "__pycache__", ".idea", "node_modules", ".env"}
+
 # Outils qui exigent une confirmation de l'utilisateur avant exécution.
 OUTILS_SENSIBLES = {"ecrire_fichier", "executer_commande"}
 
@@ -268,6 +273,60 @@ def api_nouvelle():
     en_attente = None
     sauvegarder_historique()
     return jsonify({"ok": True})
+
+
+def chemin_sur(rel):
+    """Résout un chemin relatif et garantit qu'il reste dans BASE_DIR.
+    Retourne le chemin absolu, ou None si tentative de sortie du dossier."""
+    cible = os.path.abspath(os.path.join(BASE_DIR, rel or ""))
+    try:
+        if os.path.commonpath([BASE_DIR, cible]) != BASE_DIR:
+            return None
+    except ValueError:  # chemins sur des lecteurs différents (Windows)
+        return None
+    return cible
+
+
+@app.route("/api/arborescence")
+def api_arborescence():
+    """Liste le contenu d'un dossier (dossiers d'abord, puis fichiers)."""
+    cible = chemin_sur(request.args.get("dossier", ""))
+    if not cible or not os.path.isdir(cible):
+        return jsonify({"erreur": "Dossier invalide"}), 400
+    entrees = []
+    for nom in os.listdir(cible):
+        if nom in DOSSIERS_IGNORES:
+            continue
+        chemin_abs = os.path.join(cible, nom)
+        est_dossier = os.path.isdir(chemin_abs)
+        entrees.append({
+            "nom": nom,
+            "chemin": os.path.relpath(chemin_abs, BASE_DIR).replace("\\", "/"),
+            "type": "dossier" if est_dossier else "fichier",
+        })
+    entrees.sort(key=lambda e: (e["type"] != "dossier", e["nom"].lower()))
+    return jsonify({"entrees": entrees})
+
+
+@app.route("/api/fichier")
+def api_fichier():
+    """Renvoie le contenu texte d'un fichier du projet."""
+    rel = request.args.get("chemin", "")
+    cible = chemin_sur(rel)
+    if not cible or not os.path.isfile(cible):
+        return jsonify({"erreur": "Fichier invalide"}), 400
+    if os.path.basename(cible) in DOSSIERS_IGNORES:
+        return jsonify({"erreur": "Fichier masqué"}), 403
+    if os.path.getsize(cible) > 1_000_000:
+        return jsonify({"erreur": "Fichier trop volumineux (> 1 Mo)"}), 400
+    try:
+        with open(cible, "r", encoding="utf-8") as f:
+            contenu = f.read()
+    except UnicodeDecodeError:
+        return jsonify({"erreur": "Fichier binaire, non affichable"}), 400
+    except Exception as e:
+        return jsonify({"erreur": f"Lecture impossible : {e}"}), 400
+    return jsonify({"chemin": rel, "contenu": contenu})
 
 
 charger_historique()
