@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=4">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=5">
 
 <!-- PWA -->
 <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -77,7 +77,12 @@
           </svg>
         </div>
         <h2>Prêt à coder</h2>
-        <p>Choisis un dossier de travail (📂 en haut), puis demande-moi de lire, écrire, chercher ou exécuter du code.</p>
+        <p>Voici le dossier dans lequel l'agent travaille. Change-le quand tu veux, puis demande-moi de lire, écrire, chercher ou exécuter du code.</p>
+        <button type="button" class="ws-carte ws-changer">
+          <span class="ws-carte-ico">📂</span>
+          <span class="ws-carte-txt">L'agent travaille dans <b class="ws-carte-nom">…</b></span>
+          <span class="ws-carte-action">Changer de dossier</span>
+        </button>
         <div class="suggestions">
           <button class="sugg">📊 Analyse le projet et résume sa structure</button>
           <button class="sugg">🐛 Cherche des bugs potentiels dans le code</button>
@@ -88,12 +93,16 @@
     </div>
 
     <div id="input-zone">
+      <div id="pieces-jointes"></div>
       <div class="saisie">
+        <button id="joindre" title="Joindre un fichier au dossier de travail">📎</button>
         <textarea id="message" rows="1" placeholder="Écris ta demande…  (Entrée pour envoyer, Maj+Entrée = nouvelle ligne)" autofocus></textarea>
         <button id="envoyer" title="Envoyer">➤</button>
       </div>
+      <input type="file" id="fichier-input" multiple hidden>
       <div class="astuce">L'agent peut faire des erreurs — vérifie les actions avant de confirmer. Les modifs sont annulables (↩).</div>
     </div>
+    <div id="depot-voile"><div class="depot-msg">📥 Dépose ici pour ajouter au dossier de travail</div></div>
   </main>
 
 </div>
@@ -116,6 +125,7 @@
       <div class="m-actions">
         <button class="v-modifier" title="Modifier le fichier">Modifier</button>
         <button class="v-enregistrer" title="Enregistrer">💾 Enregistrer</button>
+        <button class="v-telecharger" title="Télécharger">⬇</button>
         <button class="v-copier" title="Copier">Copier</button>
         <button class="m-fermer" title="Fermer">✕</button>
       </div>
@@ -171,7 +181,7 @@
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="{{ url_for('static', filename='script.js') }}?v=4"></script>
+<script src="{{ url_for('static', filename='script.js') }}?v=5"></script>
 
 </body>
 </html>

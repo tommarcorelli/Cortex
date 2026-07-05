@@ -16,6 +16,7 @@ let abortCtl = null;        // AbortController du fetch streaming
 let bulleFlux = null;       // bulle en cours de remplissage (streaming)
 let texteFlux = "";         // texte accumulé de la bulle en cours
 let renduPrevu = false;     // throttle du rendu markdown
+let fichiersJoints = [];    // chemins des fichiers téléversés, en attente d'envoi
 
 function scrollBas() { chatDiv.scrollTop = chatDiv.scrollHeight; }
 
@@ -35,6 +36,14 @@ function basename(chemin) {
   if (!chemin) return "";
   const parties = chemin.replace(/[\\/]+$/, "").split(/[\\/]/);
   return parties[parties.length - 1] || chemin;
+}
+
+// Reflète le dossier de travail courant dans le header et sur l'accueil.
+function majDossierPartout() {
+  const nom = basename(wsActuel) || "…";
+  const el = document.getElementById("ws-nom");
+  if (el) el.textContent = nom;
+  document.querySelectorAll(".ws-carte-nom").forEach((n) => (n.textContent = nom));
 }
 
 /* ===== Rendu des messages ===== */
@@ -268,11 +277,19 @@ async function requeteStream(url, corps) {
 
 async function envoyer() {
   const texte = input.value.trim();
-  if (!texte || enCours) return;
-  messageUtilisateur(texte);
+  if ((!texte && !fichiersJoints.length) || enCours) return;
+  let aEnvoyer = texte;
+  if (fichiersJoints.length) {
+    const liste = fichiersJoints.join(", ");
+    aEnvoyer = (texte ? texte + "\n\n" : "") +
+      `(Fichiers que je viens d'ajouter dans le dossier de travail : ${liste})`;
+  }
+  messageUtilisateur(texte || "📎 " + fichiersJoints.join(", "));
   input.value = "";
+  fichiersJoints = [];
+  document.getElementById("pieces-jointes").innerHTML = "";
   autoTaille();
-  await requeteStream("/api/chat", { message: texte, conversation: convId });
+  await requeteStream("/api/chat", { message: aEnvoyer, conversation: convId });
 }
 
 async function arreter() {
@@ -437,15 +454,20 @@ async function chargerConversations() {
 }
 
 function accueilHTML(titre) {
+  const nom = basename(wsActuel) || "…";
   return '<div class="vide" id="accueil"><h2>' + titre + '</h2>' +
-    '<p>Demande-moi de lire, écrire, chercher ou exécuter du code.</p></div>';
+    '<p>Voici le dossier dans lequel l\'agent travaille. Change-le quand tu veux.</p>' +
+    '<button type="button" class="ws-carte ws-changer">' +
+    '<span class="ws-carte-ico">📂</span>' +
+    '<span class="ws-carte-txt">L\'agent travaille dans <b class="ws-carte-nom">' + nom + '</b></span>' +
+    '<span class="ws-carte-action">Changer de dossier</span></button></div>';
 }
 
 function appliquerConv(data) {
   convId = data.id;
   if (data.workspace) {
     wsActuel = data.workspace;
-    wsNom.textContent = basename(wsActuel);
+    majDossierPartout();
     arbreCharge = false;  // l'explorateur suivra le nouveau dossier
   }
   if (data.modele && selectModele.querySelector(`option[value="${data.modele}"]`)) {
@@ -582,15 +604,16 @@ async function chargerDossiers(chemin) {
   }
 }
 
-document.getElementById("ws-btn").addEventListener("click", () => {
+function ouvrirModalDossier() {
   modalDossier.classList.add("ouvert");
   chargerDossiers(wsActuel || "");
-});
+}
+document.getElementById("ws-btn").addEventListener("click", ouvrirModalDossier);
 
 document.getElementById("d-choisir").addEventListener("click", async () => {
   if (!dossierCourant) { toast("Choisis un dossier (pas la liste des lecteurs)"); return; }
   wsActuel = dossierCourant;
-  wsNom.textContent = basename(wsActuel);
+  majDossierPartout();
   arbreCharge = false;
   await patchConv({ workspace: wsActuel });
   await fetch("/api/config", {
@@ -724,7 +747,7 @@ async function demarrer() {
     const resConfig = await fetch("/api/config");
     const config = await resConfig.json();
     wsActuel = config.workspace;
-    wsNom.textContent = basename(wsActuel);
+    majDossierPartout();
     if (selectModele.querySelector(`option[value="${config.modele}"]`)) {
       selectModele.value = config.modele;
     }
@@ -776,7 +799,9 @@ document.addEventListener("click", (e) => {
   if (sugg) {
     input.value = sugg.textContent.replace(/^\S+\s/, "");
     envoyer();
+    return;
   }
+  if (e.target.closest(".ws-changer")) ouvrirModalDossier();
 });
 
 /* ===== Explorateur de fichiers ===== */
@@ -933,6 +958,15 @@ async function ouvrirFichier(rel) {
 
 btnModifier.addEventListener("click", afficherEdition);
 btnEnregistrer.addEventListener("click", enregistrerFichier);
+visionneuse.querySelector(".v-telecharger").addEventListener("click", () => {
+  if (!fichierOuvert) return;
+  const a = document.createElement("a");
+  a.href = "/api/telecharger?chemin=" + encodeURIComponent(fichierOuvert) +
+           "&ws=" + encodeURIComponent(wsActuel);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
 document.getElementById("toggle-fichiers").addEventListener("click", basculerExplorateur);
 document.getElementById("rafraichir").addEventListener("click", () => chargerDossier("", arbre));
 voileExp.addEventListener("click", basculerExplorateur);
@@ -948,6 +982,78 @@ document.querySelectorAll(".modal").forEach((modal) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") document.querySelectorAll(".modal.ouvert")
     .forEach((m) => m.classList.remove("ouvert"));
+});
+
+/* ===== Upload / téléchargement de fichiers ===== */
+const depotVoile = document.getElementById("depot-voile");
+const champFichier = document.getElementById("fichier-input");
+let dragCompteur = 0;
+
+function ajouterPastille(nom) {
+  const cont = document.getElementById("pieces-jointes");
+  const el = document.createElement("span");
+  el.className = "pj";
+  el.innerHTML = '<span>📎</span><span class="pj-nom"></span>' +
+    '<span class="pj-etat">…</span><button class="pj-x" title="Retirer">✕</button>';
+  el.querySelector(".pj-nom").textContent = nom;
+  el.querySelector(".pj-x").onclick = () => {
+    if (el.dataset.chemin) fichiersJoints = fichiersJoints.filter((c) => c !== el.dataset.chemin);
+    el.remove();
+  };
+  cont.appendChild(el);
+  return { el, etat: el.querySelector(".pj-etat") };
+}
+
+async function televerser(fichiers) {
+  if (!wsActuel) { toast("Choisis d'abord un dossier de travail"); return; }
+  for (const f of fichiers) {
+    const p = ajouterPastille(f.name);
+    const form = new FormData();
+    form.append("fichier", f);
+    form.append("ws", wsActuel);
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      const data = await res.json();
+      if (data.erreur) { p.el.remove(); toast("⚠️ " + data.erreur); continue; }
+      fichiersJoints.push(data.chemin);
+      p.el.dataset.chemin = data.chemin;
+      p.etat.textContent = "✓";
+      arbreCharge = false;  // le fichier apparaîtra dans l'explorateur au prochain ouverture
+    } catch (e) {
+      p.el.remove();
+      toast("⚠️ Téléversement échoué");
+    }
+  }
+}
+
+document.getElementById("joindre").addEventListener("click", () => {
+  if (!wsActuel) { toast("Choisis d'abord un dossier de travail"); return; }
+  champFichier.click();
+});
+champFichier.addEventListener("change", (e) => {
+  televerser(e.target.files);
+  e.target.value = "";  // autorise le re-téléversement du même fichier
+});
+
+// Glisser-déposer sur toute la fenêtre.
+window.addEventListener("dragenter", (e) => {
+  if (e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")) {
+    dragCompteur++;
+    depotVoile.classList.add("actif");
+  }
+});
+window.addEventListener("dragover", (e) => { if (depotVoile.classList.contains("actif")) e.preventDefault(); });
+window.addEventListener("dragleave", () => {
+  dragCompteur = Math.max(0, dragCompteur - 1);
+  if (!dragCompteur) depotVoile.classList.remove("actif");
+});
+window.addEventListener("drop", (e) => {
+  dragCompteur = 0;
+  depotVoile.classList.remove("actif");
+  if (e.dataTransfer && e.dataTransfer.files.length) {
+    e.preventDefault();
+    televerser(e.dataTransfer.files);
+  }
 });
 
 demarrer();

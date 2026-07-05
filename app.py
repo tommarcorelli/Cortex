@@ -6,7 +6,8 @@ import shutil
 import difflib
 import subprocess
 import urllib.request
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, Response
+from werkzeug.utils import secure_filename
 from mistralai.client import Mistral
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -15,6 +16,8 @@ import tools_web as tools
 load_dotenv()
 
 app = Flask(__name__)
+# Taille maximale d'un fichier téléversé (15 Mo).
+app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024
 
 client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
 
@@ -23,6 +26,11 @@ client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 groq_client = (OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
                if GROQ_API_KEY else None)
+
+# Gemini : endpoint compatible OpenAI de Google (function calling gratuit).
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+gemini_client = (OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                        api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None)
 
 # Racine de l'application (fallback du dossier de travail).
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -63,6 +71,15 @@ GROQ_CANDIDATS = [
     ("deepseek-r1-distill-llama-70b", "DeepSeek R1 70B · Groq"),
 ]
 GROQ_EXCLUS = ("whisper", "tts", "guard", "distil", "embed", "vision")
+
+GEMINI_CANDIDATS = [
+    ("gemini-2.5-flash", "Gemini 2.5 Flash · Google (gratuit)"),
+    ("gemini-2.5-pro", "Gemini 2.5 Pro · Google"),
+    ("gemini-2.0-flash", "Gemini 2.0 Flash · Google (rapide)"),
+]
+GEMINI_EXCLUS = ("embedding", "aqa", "imagen", "tts", "learnlm",
+                 "deep-research", "antigravity", "preview", "exp",
+                 "robotics", "computer-use", "image", "audio")
 
 # Au-delà de ce volume (en caractères, ~4 caractères par token), on compacte
 # l'historique avant d'appeler le modèle.
@@ -627,14 +644,12 @@ def tour_ollama(conv, modele):
     return texte, appels
 
 
-def tour_groq(conv, modele):
-    """Streame un tour via Groq (API compatible OpenAI). Même contrat de sortie
-    que tour_mistral : (texte, appels)."""
-    if not groq_client:
-        raise RuntimeError("Clé Groq absente : ajoute GROQ_API_KEY dans le fichier .env")
+def tour_compat(client_compat, conv, modele):
+    """Streame un tour via une API compatible OpenAI (Groq, Gemini). Même
+    contrat de sortie que tour_mistral : (texte, appels)."""
     texte = ""
     appels = []
-    flux = groq_client.chat.completions.create(
+    flux = client_compat.chat.completions.create(
         model=modele,
         messages=[{"role": "system", "content": SYSTEM_PROMPT}] + conv["messages"],
         tools=outils_definitions,
@@ -682,7 +697,13 @@ def tour_modele(conv):
     if fournisseur == "ollama":
         return (yield from tour_ollama(conv, nom))
     if fournisseur == "groq":
-        return (yield from tour_groq(conv, nom))
+        if not groq_client:
+            raise RuntimeError("Clé Groq absente : ajoute GROQ_API_KEY dans le .env")
+        return (yield from tour_compat(groq_client, conv, nom))
+    if fournisseur == "gemini":
+        if not gemini_client:
+            raise RuntimeError("Clé Gemini absente : ajoute GEMINI_API_KEY dans le .env")
+        return (yield from tour_compat(gemini_client, conv, nom))
     return (yield from tour_mistral(conv, nom or modele))
 
 
@@ -933,33 +954,44 @@ def api_config_maj():
     return jsonify(config)
 
 
-def modeles_groq():
-    """Modèles Groq réellement disponibles (recommandés d'abord).
-    Vide si aucune clé n'est configurée."""
-    if not groq_client:
+def lister_modeles_compat(api_key, url_models, candidats, exclus, prefixe, etiquette):
+    """Modèles disponibles sur une API compatible OpenAI (recommandés d'abord).
+    Vide si aucune clé. Robuste aux renommages : filtré par /models réel."""
+    if not api_key:
         return []
     try:
         requete = urllib.request.Request(
-            "https://api.groq.com/openai/v1/models",
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}"})
+            url_models, headers={"Authorization": f"Bearer {api_key}"})
         with urllib.request.urlopen(requete, timeout=4) as r:
-            dispos = {m.get("id") for m in json.load(r).get("data", [])}
+            dispos = {(m.get("id") or "").split("/")[-1] for m in json.load(r).get("data", [])}
     except Exception:
         # Clé présente mais liste inaccessible : proposer les candidats connus.
-        return [{"id": "groq:" + mid, "nom": nom} for mid, nom in GROQ_CANDIDATS]
-    labels = dict(GROQ_CANDIDATS)
-    modeles = [{"id": "groq:" + mid, "nom": nom}
-               for mid, nom in GROQ_CANDIDATS if mid in dispos]
+        return [{"id": prefixe + ":" + mid, "nom": nom} for mid, nom in candidats]
+    labels = dict(candidats)
+    modeles = [{"id": prefixe + ":" + mid, "nom": nom}
+               for mid, nom in candidats if mid in dispos]
     for mid in sorted(dispos):
-        if mid in labels or any(x in mid.lower() for x in GROQ_EXCLUS):
+        if mid in labels or any(x in mid.lower() for x in exclus):
             continue
-        modeles.append({"id": "groq:" + mid, "nom": mid + " · Groq"})
+        modeles.append({"id": prefixe + ":" + mid, "nom": mid + " · " + etiquette})
     return modeles[:10]
+
+
+def modeles_groq():
+    return lister_modeles_compat(
+        GROQ_API_KEY, "https://api.groq.com/openai/v1/models",
+        GROQ_CANDIDATS, GROQ_EXCLUS, "groq", "Groq")
+
+
+def modeles_gemini():
+    return lister_modeles_compat(
+        GEMINI_API_KEY, "https://generativelanguage.googleapis.com/v1beta/openai/models",
+        GEMINI_CANDIDATS, GEMINI_EXCLUS, "gemini", "Google")
 
 
 @app.route("/api/modeles")
 def api_modeles():
-    modeles = list(MODELES_MISTRAL) + modeles_groq()
+    modeles = list(MODELES_MISTRAL) + modeles_groq() + modeles_gemini()
     try:
         with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=1.5) as r:
             tags = json.load(r)
@@ -1242,6 +1274,48 @@ def api_fichier_sauver():
     except Exception as e:
         return jsonify({"erreur": f"Écriture impossible : {e}"}), 400
     return jsonify({"ok": True})
+
+
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    """Téléverse un fichier directement dans le dossier de travail."""
+    ws = request.form.get("ws")
+    ws = ws if ws and os.path.isdir(ws) else BASE_DIR
+    fichier = request.files.get("fichier")
+    if not fichier or not fichier.filename:
+        return jsonify({"erreur": "Aucun fichier reçu"}), 400
+    nom = secure_filename(fichier.filename) or "fichier_televerse"
+    cible = chemin_sur(ws, nom)
+    if not cible:
+        return jsonify({"erreur": "Nom de fichier invalide"}), 400
+    # Évite d'écraser silencieusement un fichier existant : suffixe (1), (2)…
+    base, ext = os.path.splitext(cible)
+    i = 1
+    while os.path.exists(cible):
+        cible = f"{base} ({i}){ext}"
+        i += 1
+    try:
+        fichier.save(cible)
+    except Exception as e:
+        return jsonify({"erreur": f"Enregistrement impossible : {e}"}), 400
+    return jsonify({"ok": True, "chemin": os.path.relpath(cible, ws).replace("\\", "/")})
+
+
+@app.route("/api/telecharger")
+def api_telecharger():
+    """Renvoie un fichier du dossier de travail en pièce jointe."""
+    ws = ws_requete()
+    cible = chemin_sur(ws, request.args.get("chemin", ""))
+    if not cible or not os.path.isfile(cible):
+        return jsonify({"erreur": "Fichier invalide"}), 400
+    if os.path.basename(cible) in DOSSIERS_IGNORES:
+        return jsonify({"erreur": "Fichier protégé"}), 403
+    return send_file(cible, as_attachment=True, download_name=os.path.basename(cible))
+
+
+@app.errorhandler(413)
+def trop_gros(_):
+    return jsonify({"erreur": "Fichier trop volumineux (max 15 Mo)"}), 413
 
 
 migrer_ancien_historique()

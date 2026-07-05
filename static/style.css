@@ -399,6 +399,47 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 }
 .astuce { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
 
+/* Bouton joindre + pièces jointes */
+#joindre {
+  width: 40px; height: 40px; flex: none;
+  border: 1px solid var(--border); border-radius: 12px; cursor: pointer;
+  background: rgba(255,255,255,0.04);
+  color: var(--muted); font-size: 17px;
+  display: grid; place-items: center;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+#joindre:hover { background: rgba(124,92,255,0.16); color: var(--text); border-color: rgba(124,92,255,0.5); }
+#pieces-jointes { display: flex; flex-wrap: wrap; gap: 8px; }
+#pieces-jointes:not(:empty) { margin-bottom: 10px; }
+.pj {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px; font-size: 12px;
+  background: rgba(34,211,238,0.08);
+  border: 1px solid rgba(34,211,238,0.25);
+  border-radius: 10px;
+  animation: apparait 0.2s ease;
+}
+.pj .pj-nom { font-family: 'JetBrains Mono', monospace; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pj .pj-etat { color: var(--muted); }
+.pj .pj-x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px; line-height: 1; }
+.pj .pj-x:hover { color: #f87171; }
+
+/* Voile de glisser-déposer */
+#depot-voile {
+  position: fixed; inset: 0; z-index: 80;
+  display: none; place-items: center;
+  background: rgba(10,11,18,0.78); backdrop-filter: blur(3px);
+}
+#depot-voile.actif { display: grid; }
+.depot-msg {
+  padding: 32px 52px;
+  border: 2px dashed rgba(124,92,255,0.6);
+  border-radius: 20px;
+  font-size: 18px; font-weight: 700; color: var(--text);
+  background: rgba(124,92,255,0.1);
+  pointer-events: none;
+}
+
 /* Écran d'accueil */
 .vide {
   margin: auto; text-align: center; color: var(--muted); max-width: 460px;
@@ -433,6 +474,28 @@ main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   background: rgba(124,92,255,0.14);
   border-color: rgba(124,92,255,0.5);
   transform: translateY(-1px);
+}
+
+/* Encart « dossier de travail » sur l'accueil */
+.ws-carte {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; margin: 8px 0 4px;
+  padding: 14px 16px;
+  font-family: inherit; text-align: left;
+  background: linear-gradient(135deg, rgba(124,92,255,0.16), rgba(34,211,238,0.08));
+  border: 1px solid rgba(124,92,255,0.4);
+  border-radius: 14px; cursor: pointer;
+  transition: filter 0.2s, transform 0.12s;
+}
+.ws-carte:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.ws-carte-ico { font-size: 22px; flex: none; }
+.ws-carte-txt { flex: 1; font-size: 13.5px; color: var(--text); }
+.ws-carte-nom { color: var(--accent2); font-family: 'JetBrains Mono', monospace; }
+.ws-carte-action {
+  flex: none; font-size: 12px; font-weight: 700;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(124,92,255,0.25); color: #cbb8ff;
+  white-space: nowrap;
 }
 
 /* Drawer explorateur */
