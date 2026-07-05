@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import uuid
@@ -602,9 +603,65 @@ def messages_pour_ollama(conv):
     return messages
 
 
+def extraire_objets_json(texte):
+    """Renvoie les objets JSON équilibrés {...} trouvés dans le texte (gère
+    l'imbrication, contrairement à une regex). Utilisé pour récupérer un appel
+    d'outil noyé dans du texte."""
+    objets = []
+    profondeur = 0
+    debut = -1
+    for i, c in enumerate(texte):
+        if c == "{":
+            if profondeur == 0:
+                debut = i
+            profondeur += 1
+        elif c == "}" and profondeur > 0:
+            profondeur -= 1
+            if profondeur == 0 and debut >= 0:
+                objets.append(texte[debut:i + 1])
+                debut = -1
+    return objets
+
+
+def parser_appels_texte(texte):
+    """Repli : certains modèles locaux (via Ollama) écrivent l'appel d'outil
+    en JSON dans le texte au lieu d'utiliser le champ tool_calls natif. On les
+    récupère ici, même quand du texte entoure le JSON."""
+    if not texte:
+        return []
+    nettoye = re.sub(r"</?tool_call>|```(?:json)?", " ", texte)
+    appels = []
+    for bloc in extraire_objets_json(nettoye):
+        try:
+            item = json.loads(bloc)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(item, dict):
+            continue
+        nom = item.get("name") or item.get("tool") or item.get("function")
+        if isinstance(nom, dict):
+            nom = nom.get("name")
+        args = item.get("arguments") or item.get("parameters") or item.get("args") or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        if nom in fonctions_disponibles:
+            appels.append({
+                "id": uuid.uuid4().hex[:9], "type": "function",
+                "function": {"name": nom,
+                             "arguments": json.dumps(args, ensure_ascii=False)},
+            })
+    return appels
+
+
 def tour_ollama(conv, modele):
     texte = ""
     appels = []
+    # bufferise : None tant qu'indéterminé, True si le contenu ressemble à un
+    # appel d'outil écrit en texte (on le retient au lieu de le streamer).
+    bufferise = None
     corps = json.dumps({
         "model": modele,
         "messages": messages_pour_ollama(conv),
@@ -627,7 +684,11 @@ def tour_ollama(conv, modele):
             contenu = message.get("content")
             if contenu:
                 texte += contenu
-                yield {"type": "token", "t": contenu}
+                if bufferise is None:
+                    debut = texte.lstrip()[:12]
+                    bufferise = debut.startswith(("```", "{", "[", "<tool_call"))
+                if not bufferise:
+                    yield {"type": "token", "t": contenu}
             for tc in message.get("tool_calls") or []:
                 fn = tc.get("function") or {}
                 appels.append({
@@ -641,6 +702,13 @@ def tour_ollama(conv, modele):
             if d.get("done"):
                 conv["usage"]["entree"] += d.get("prompt_eval_count") or 0
                 conv["usage"]["sortie"] += d.get("eval_count") or 0
+    # Repli : appel d'outil écrit en texte plutôt qu'en tool_calls natifs.
+    if not appels and bufferise:
+        appels = parser_appels_texte(texte)
+        if appels:
+            texte = ""  # c'était un appel d'outil, pas une réponse à afficher
+        else:
+            yield {"type": "token", "t": texte}  # finalement du texte : on l'affiche
     return texte, appels
 
 
