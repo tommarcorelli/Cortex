@@ -1082,3 +1082,152 @@ header {
   /* Cibles tactiles un peu plus grandes */
   #envoyer, #joindre { width: 44px; height: 44px; }
 }
+
+/* ============================================================
+   Thème « CasaOS » — carte blanche du user (07/07/2026)
+   Papier-peint coloré lumineux + cartes givrées flottantes,
+   coins très arrondis, ombres douces (esprit dashboard macOS).
+   Couche finale : prime sur tout ce qui précède.
+   ============================================================ */
+
+/* --- Papier-peint : dégradé vif et lumineux (fini le quasi-noir) --- */
+body {
+  background:
+    radial-gradient(1200px 820px at 12% 2%,  rgba(129, 140, 248, 0.85), transparent 55%),
+    radial-gradient(1120px 780px at 90% 10%, rgba(232, 121, 249, 0.70), transparent 55%),
+    radial-gradient(1200px 900px at 50% 112%, rgba(45, 212, 191, 0.62), transparent 58%),
+    linear-gradient(140deg, #3b2f8f 0%, #6d28d9 46%, #0e7490 100%);
+  background-attachment: fixed;
+}
+/* Blobs animés plus vifs : le fond « vit » comme un vrai papier-peint */
+.aurora .a1 { background: radial-gradient(circle, rgba(139, 92, 246, 0.55) 0%, rgba(139, 92, 246, 0.16) 42%, transparent 70%); }
+.aurora .a2 { background: radial-gradient(circle, rgba(45, 212, 191, 0.48) 0%, rgba(45, 212, 191, 0.15) 42%, transparent 70%); }
+.aurora .a3 { background: radial-gradient(circle, rgba(236, 72, 153, 0.44) 0%, rgba(236, 72, 153, 0.14) 42%, transparent 70%); }
+
+/* --- Verre givré : fort flou + saturation pour que les couleurs du
+   papier-peint transparaissent (signature CasaOS/macOS). Fond sombre
+   translucide → le texte clair reste lisible ; le « blanc » vient du
+   liseré et du reflet interne, pas du remplissage. --- */
+header, #conversations, #input-zone, #explorateur, .m-fenetre,
+.rangee.ia .bulle, .saisie, .confirmation, .ws-carte, .sugg {
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+}
+
+header {
+  background: rgba(18, 16, 34, 0.42);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 34px -20px rgba(0, 0, 0, 0.55);
+}
+#conversations {
+  background: rgba(16, 14, 32, 0.40);
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Bulles IA : carte givrée arrondie qui flotte */
+.rangee.ia .bulle {
+  background: rgba(24, 22, 46, 0.44);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 22px; border-bottom-left-radius: 8px;
+  box-shadow: 0 16px 44px -24px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.rangee.moi .bulle {
+  border-radius: 22px; border-bottom-right-radius: 8px;
+  box-shadow: 0 16px 44px -18px rgba(124, 92, 255, 0.7);
+}
+
+/* Zone de saisie : grande pilule givrée */
+#input-zone {
+  background: rgba(16, 14, 32, 0.38);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+}
+.saisie {
+  background: rgba(14, 13, 30, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 22px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 34px -22px rgba(0, 0, 0, 0.6);
+}
+
+/* Squircles givrés pour tous les boutons ronds du header */
+#toggle-fichiers, #toggle-conv, #btn-phone, #btn-quitter, #joindre {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+#ws-btn, #modele, #tokens {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/* --- Accueil = tableau de bord CasaOS : grandes tuiles arrondies --- */
+.vide { max-width: 560px; }
+.suggestions { gap: 14px; margin-top: 26px; }
+.sugg {
+  min-height: 92px;
+  padding: 18px;
+  border-radius: 22px;
+  font-size: 13.5px; font-weight: 600;
+  background: rgba(24, 22, 46, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 38px -24px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  display: flex; align-items: flex-end;
+}
+.sugg:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-3px);
+  box-shadow: 0 22px 48px -22px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.ws-carte {
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 16px 42px -24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.ws-carte-action { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+/* --- Modales & explorateur : cartes givrées très arrondies --- */
+.modal { background: rgba(18, 14, 40, 0.5); }
+.m-fenetre {
+  background: rgba(28, 25, 52, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 24px;
+  box-shadow: 0 44px 90px -30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.m-entete, .m-pied { background: rgba(255, 255, 255, 0.04); }
+#explorateur {
+  background: rgba(22, 20, 44, 0.72);
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+.conv-item.active {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+#nouvelle, #envoyer, #exp-travailler {
+  box-shadow: 0 10px 26px -12px rgba(124, 92, 255, 0.7);
+}
+
+/* Le drawer explorateur part sous le header arrondi */
+@media (min-width: 901px) {
+  #explorateur { border-radius: 20px 0 0 20px; }
+}
+
+/* Lisibilité du texte secondaire sur le papier-peint coloré : on
+   éclaircit et on ajoute une ombre douce (astuce macOS pour poser du
+   texte sur une image sans perdre en contraste). */
+.vide h2 { text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35); }
+.vide p { color: #d6d9ec; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3); }
+.astuce { color: #c3c7dd; }
+.titre-zone .s { color: #c3c7dd; }
+
+/* Rappel du correctif mobile (100dvh) au cas où une règle plus haut le
+   réécrirait — la couche finale garantit l'affichage téléphone. */
+html, body { height: 100dvh; }
+
+@media (max-width: 900px) {
+  /* Tuiles moins hautes et texte centré : évite l'effet « carte vide »
+     quand elles passent en une seule colonne. */
+  .sugg { min-height: 0; padding: 16px 18px; align-items: center; }
+}
